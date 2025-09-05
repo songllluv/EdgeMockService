@@ -1,1 +1,1 @@
-deno serve --unstable-kv index.js
+deno serve --unstable-kv --allow-env index.js
