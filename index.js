@@ -53,6 +53,13 @@ async function cleanExpiredKeys() {
   }
 }
 
+const corsHeaders = {
+  "Content-Type": "application/json",
+  "Access-Control-Allow-Origin": "https://songlll.pages.dev",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
+};
+
 export default {
   async fetch(req) {
     const url = new URL(req.url);
@@ -63,55 +70,55 @@ export default {
       const { name, password, key } = data;
 
       const usernameErr = validateUsername(name);
-      if (usernameErr) return new Response(JSON.stringify({ error: usernameErr }), { status: 400, headers: { "Content-Type": "application/json" } });
+      if (usernameErr) return new Response(JSON.stringify({ error: usernameErr }), { status: 400, headers: corsHeaders });
 
       const passwordErr = validatePassword(password);
-      if (passwordErr) return new Response(JSON.stringify({ error: passwordErr }), { status: 400, headers: { "Content-Type": "application/json" } });
+      if (passwordErr) return new Response(JSON.stringify({ error: passwordErr }), { status: 400, headers: corsHeaders });
 
       const keyRes = await kv.get(["invitekey", key]);
-      if (!keyRes.value) return new Response(JSON.stringify({ error: "邀请码无效" }), { status: 400, headers: { "Content-Type": "application/json" } });
+      if (!keyRes.value) return new Response(JSON.stringify({ error: "邀请码无效" }), { status: 400, headers: corsHeaders });
       if (keyRes.value < Date.now()) {
         await kv.delete(["invitekey", key]);
-        return new Response(JSON.stringify({ error: "邀请码已过期" }), { status: 400, headers: { "Content-Type": "application/json" } });
+        return new Response(JSON.stringify({ error: "邀请码已过期" }), { status: 400, headers: corsHeaders });
       }
 
       const user = await kv.get(["user", name]);
-      if (user.value) return new Response(JSON.stringify({ error: "用户名已存在" }), { status: 400, headers: { "Content-Type": "application/json" } });
+      if (user.value) return new Response(JSON.stringify({ error: "用户名已存在" }), { status: 400, headers: corsHeaders });
 
       await kv.set(["user", name], { password });
       await kv.delete(["invitekey", key]);
 
-      return new Response(JSON.stringify({ message: "注册成功" }), { status: 200, headers: { "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ message: "注册成功" }), { status: 200, headers: corsHeaders });
     }
 
     // --- 生成邀请码 ---
     if (url.pathname === "/newInviteKey") {
       const { password } = data;
       if (password !== ADMIN_PASSWORD && !(await checkTempPassword(password))) {
-        return new Response(JSON.stringify({ error: "密码无效" }), { status: 403, headers: { "Content-Type": "application/json" } });
+        return new Response(JSON.stringify({ error: "密码无效" }), { status: 403, headers: corsHeaders });
       }
       const key = Math.random().toString(36).slice(-8);
       const validityTime = Date.now() + 7 * 24 * 60 * 60 * 1000; // 7天
       await kv.set(["invitekey", key], validityTime);
-      return new Response(JSON.stringify({ key, validUntil: validityTime }), { status: 200, headers: { "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ key, validUntil: validityTime }), { status: 200, headers: corsHeaders });
     }
 
     // --- 添加临时密码 ---
     if (url.pathname === "/addTempPassword") {
       const { password, newPassword } = data;
       if (password !== ADMIN_PASSWORD) {
-        return new Response(JSON.stringify({ error: "只有站长可添加临时密码" }), { status: 403, headers: { "Content-Type": "application/json" } });
+        return new Response(JSON.stringify({ error: "只有站长可添加临时密码" }), { status: 403, headers: corsHeaders });
       }
       const pwErr = validatePassword(newPassword, 10);
-      if (pwErr) return new Response(JSON.stringify({ error: pwErr }), { status: 400, headers: { "Content-Type": "application/json" } });
+      if (pwErr) return new Response(JSON.stringify({ error: pwErr }), { status: 400, headers: corsHeaders });
 
       const temp = await kv.get(["tempPassword", newPassword]);
-      if (temp.value) return new Response(JSON.stringify({ error: "临时密码已存在" }), { status: 400, headers: { "Content-Type": "application/json" } });
+      if (temp.value) return new Response(JSON.stringify({ error: "临时密码已存在" }), { status: 400, headers: corsHeaders });
 
       const validityTime = Date.now() + 7 * 24 * 60 * 60 * 1000; // 7天
       await kv.set(["tempPassword", newPassword], validityTime);
 
-      return new Response(JSON.stringify({ message: "临时密码添加成功", validUntil: validityTime }), { status: 200, headers: { "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ message: "临时密码添加成功", validUntil: validityTime }), { status: 200, headers: corsHeaders });
     }
 
     // --- 登录 ---
@@ -119,22 +126,22 @@ export default {
       const { name, password } = data;
       const user = await kv.get(["user", name]);
       if (!user.value || user.value.password !== password) {
-        return new Response(JSON.stringify({ error: "用户名或密码错误" }), { status: 400, headers: { "Content-Type": "application/json" } });
+        return new Response(JSON.stringify({ error: "用户名或密码错误" }), { status: 400, headers: corsHeaders });
       }
       const token = crypto.randomUUID();
       const validityTime = Date.now() + 24 * 60 * 60 * 1000; // 24小时
       await kv.set(["token", token], { name, validityTime });
-      return new Response(JSON.stringify({ token, validUntil: validityTime }), { status: 200, headers: { "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ token, validUntil: validityTime }), { status: 200, headers: corsHeaders });
     }
 
     // --- 发表评论 ---
     if (url.pathname === "/postComment") {
       const { token, content } = data;
       const name = await checkLogin(token);
-      if (!name) return new Response(JSON.stringify({ error: "未登录" }), { status: 403, headers: { "Content-Type": "application/json" } });
+      if (!name) return new Response(JSON.stringify({ error: "未登录" }), { status: 403, headers: corsHeaders });
 
-      if (!content || content.length === 0) return new Response(JSON.stringify({ error: "评论不能为空" }), { status: 400, headers: { "Content-Type": "application/json" } });
-      if (content.length > 500) return new Response(JSON.stringify({ error: "评论过长，限制500字" }), { status: 400, headers: { "Content-Type": "application/json" } });
+      if (!content || content.length === 0) return new Response(JSON.stringify({ error: "评论不能为空" }), { status: 400, headers: corsHeaders });
+      if (content.length > 500) return new Response(JSON.stringify({ error: "评论过长，限制500字" }), { status: 400, headers: corsHeaders });
 
       const comment = { name, content, date: Date.now() };
       const q = await kv.get(QUEUE_KEY);
@@ -143,15 +150,15 @@ export default {
       if (queue.length > MAX_QUEUE_SIZE) queue.shift();
       await kv.set(QUEUE_KEY, queue);
 
-      return new Response(JSON.stringify({ message: "评论成功" }), { status: 200, headers: { "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ message: "评论成功" }), { status: 200, headers: corsHeaders });
     }
 
     // --- 获取评论 ---
     if (url.pathname === "/getComments") {
       const q = await kv.get(QUEUE_KEY);
-      return new Response(JSON.stringify(q.value || [{name:"提示",content:"还没有人评论，发一条友好的信息吧。",date:Date.now()}]), { status: 200, headers: { "Content-Type": "application/json" } });
+      return new Response(JSON.stringify(q.value || [{name:"提示",content:"还没有人评论，发一条友好的信息吧。",date:Date.now()}]), { status: 200, headers: corsHeaders });
     }
 
-    return new Response(JSON.stringify({ error: "404 Not Found" }), { status: 404, headers: { "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ error: "404 Not Found" }), { status: 404, headers: corsHeaders });
   },
 };
