@@ -4,52 +4,154 @@ const kv = await Deno.openKv();
 const QUEUE_KEY = ["comments"];
 const MAX_QUEUE_SIZE = 10;
 
-// 超长密码
-const PASSWORD =
-  "dF_O5#Oe:=^rxjxos.l#$E_+nNNynY&,R@nqRLWp@:Lu_O1uLPlqP(bg?=PT1A|oiMvE9&k#WAjXU>(^GKCq)jPN7,p*J*TQ:gOXvEzMN6d9e5Ni[XY,.Xc9WI!T9<12fv-Voye_B8/Q)v7y}pf^W.4%Nr&fjTL#c=jsJ|Xyq.f,5%ZezKevgx+Ld0-O]^Li<M?[7UZmEHyHIU<)&R9ewul-_f>bFtXt=cZ<sRgiTAR>jpMLBSX[Q]:)yU[[Hl6V";
+// 超长站长密码
+const ADMIN_PASSWORD = Deno.env.get("ADMIN_PASSWORD") || ".i6}HDhQIdu2.wOmqPLaA8Qp<JXTze*XJL>{<c@r4!^a|A|k,O#x}{04PCy*wl&nfhPTVUpm>i7ATOQiZ<A#irY?Q>NU-QVEAiua)X2_#</.q)[r9:JHM]Qb46Ju-$U?a/w8+C9lODT6h@|:^!54:&21_j3WqcO=8g<M9I]Kn|D#(*Dkb_[XOdn*_eZybHT|f#WSW5|?w_](/@d.jog3%+&NNlp]tw}mN!v7_Z&yE[3yN98Q_DD#{KTpmqOV^__Q";
+
+// 工具函数
+async function checkTempPassword(password) {
+  const temp = await kv.get(["tempPassword", password]);
+  if (!temp.value) return false;
+  if (Date.now() > temp.value) {
+    await kv.delete(["tempPassword", password]);
+    return false;
+  }
+  return true;
+}
+
+async function checkLogin(token) {
+  const res = await kv.get(["token", token]);
+  if (!res.value || res.value.validityTime < Date.now()) {
+    if (res.value) await kv.delete(["token", token]);
+    return null;
+  }
+  return res.value.name;
+}
+
+function validateUsername(name) {
+  if (!name || name.length < 3 || name.length > 20) return "用户名需要3-20位";
+  if (!/^[0-9a-zA-Z_]+$/.test(name)) return "用户名只能包含字母、数字、下划线";
+  return null;
+}
+
+function validatePassword(password, minLength = 8) {
+  if (!password || password.length < minLength) return `密码长度至少${minLength}位`;
+  if (!/[0-9]/.test(password)) return "密码需要包含数字";
+  if (!/[a-zA-Z]/.test(password)) return "密码需要包含字母";
+  return null;
+}
+
+// 清理过期 invite key / temp password / token（可调用定时器触发）
+async function cleanExpiredKeys() {
+  for await (const [key, value] of kv.list({ prefix: ["invitekey"] })) {
+    if (value < Date.now()) await kv.delete(key);
+  }
+  for await (const [key, value] of kv.list({ prefix: ["tempPassword"] })) {
+    if (value < Date.now()) await kv.delete(key);
+  }
+  for await (const [key, value] of kv.list({ prefix: ["token"] })) {
+    if (value.validityTime < Date.now()) await kv.delete(key);
+  }
+}
+
 export default {
   async fetch(req) {
-    const url=new URL(req.url);
-    const date=req.json();
+    const url = new URL(req.url);
+    const data = await req.json().catch(() => ({}));
 
-    if(url.pathname==="/register"){
-      const name=date.name;
-      const key=date.key;
-      const password=date.password;
-      var digit=0,letter=0;
-      if(name.length<3||name.length>20){
-        return new Response("用户名需要3-20位", { status: 400 });
+    // --- 注册 ---
+    if (url.pathname === "/register") {
+      const { name, password, key } = data;
+
+      const usernameErr = validateUsername(name);
+      if (usernameErr) return new Response(JSON.stringify({ error: usernameErr }), { status: 400, headers: { "Content-Type": "application/json" } });
+
+      const passwordErr = validatePassword(password);
+      if (passwordErr) return new Response(JSON.stringify({ error: passwordErr }), { status: 400, headers: { "Content-Type": "application/json" } });
+
+      const keyRes = await kv.get(["invitekey", key]);
+      if (!keyRes.value) return new Response(JSON.stringify({ error: "邀请码无效" }), { status: 400, headers: { "Content-Type": "application/json" } });
+      if (keyRes.value < Date.now()) {
+        await kv.delete(["invitekey", key]);
+        return new Response(JSON.stringify({ error: "邀请码已过期" }), { status: 400, headers: { "Content-Type": "application/json" } });
       }
-      var f=0;
-      for(var i of name){
-        if(!((i>='0'&&i<='9'))||!((i>='a'&&i<='z'))||!(i>='A'&&i<='Z')||!(i=='_')){
-          f=1;break;
-        }
-      }
-      if(f){
-        return new Response("用户名只能包含字母、数字、下划线，否则可能发生错误", { status: 400 });
-      }
-      for(var i of password){
-        if(i>='0'&&i<='9') digit++;
-        if((i>='a'&&i<='z')||(i>='A'&&i<='Z')) letter++;
-      }
-      if(password.length<8||!digit||!letter){
-        return new Response("密码需要8位以上，且包含数字和字母", { status: 400 });
-      }
-      const keyValidityTime = await kv.get(["invitekey",key]);
-      if(!keyValidityTime.value){
-        return new Response("邀请码无效", { status: 400 });
-      }
-      if(keyValidityTime.value<Date.now()){
-        return new Response("邀请码已过期", { status: 400 });
-      }
-      const user = await kv.get(["user",name]);
-      if(user.value){
-        return new Response("用户名已存在", { status: 400 });
-      }
-      await kv.set(["user",name],{password:password});
-      await kv.delete(["invitekey",key]);
-      return new Response("注册成功", { status: 200 });
+
+      const user = await kv.get(["user", name]);
+      if (user.value) return new Response(JSON.stringify({ error: "用户名已存在" }), { status: 400, headers: { "Content-Type": "application/json" } });
+
+      await kv.set(["user", name], { password });
+      await kv.delete(["invitekey", key]);
+
+      return new Response(JSON.stringify({ message: "注册成功" }), { status: 200, headers: { "Content-Type": "application/json" } });
     }
+
+    // --- 生成邀请码 ---
+    if (url.pathname === "/newInviteKey") {
+      const { password } = data;
+      if (password !== ADMIN_PASSWORD && !(await checkTempPassword(password))) {
+        return new Response(JSON.stringify({ error: "密码无效" }), { status: 403, headers: { "Content-Type": "application/json" } });
+      }
+      const key = Math.random().toString(36).slice(-8);
+      const validityTime = Date.now() + 7 * 24 * 60 * 60 * 1000; // 7天
+      await kv.set(["invitekey", key], validityTime);
+      return new Response(JSON.stringify({ key, validUntil: validityTime }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+
+    // --- 添加临时密码 ---
+    if (url.pathname === "/addTempPassword") {
+      const { password, newPassword } = data;
+      if (password !== ADMIN_PASSWORD) {
+        return new Response(JSON.stringify({ error: "只有站长可添加临时密码" }), { status: 403, headers: { "Content-Type": "application/json" } });
+      }
+      const pwErr = validatePassword(newPassword, 10);
+      if (pwErr) return new Response(JSON.stringify({ error: pwErr }), { status: 400, headers: { "Content-Type": "application/json" } });
+
+      const temp = await kv.get(["tempPassword", newPassword]);
+      if (temp.value) return new Response(JSON.stringify({ error: "临时密码已存在" }), { status: 400, headers: { "Content-Type": "application/json" } });
+
+      const validityTime = Date.now() + 7 * 24 * 60 * 60 * 1000; // 7天
+      await kv.set(["tempPassword", newPassword], validityTime);
+
+      return new Response(JSON.stringify({ message: "临时密码添加成功", validUntil: validityTime }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+
+    // --- 登录 ---
+    if (url.pathname === "/login") {
+      const { name, password } = data;
+      const user = await kv.get(["user", name]);
+      if (!user.value || user.value.password !== password) {
+        return new Response(JSON.stringify({ error: "用户名或密码错误" }), { status: 400, headers: { "Content-Type": "application/json" } });
+      }
+      const token = crypto.randomUUID();
+      const validityTime = Date.now() + 24 * 60 * 60 * 1000; // 24小时
+      await kv.set(["token", token], { name, validityTime });
+      return new Response(JSON.stringify({ token, validUntil: validityTime }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+
+    // --- 发表评论 ---
+    if (url.pathname === "/postComment") {
+      const { token, content } = data;
+      const name = await checkLogin(token);
+      if (!name) return new Response(JSON.stringify({ error: "未登录" }), { status: 403, headers: { "Content-Type": "application/json" } });
+
+      if (!content || content.length === 0) return new Response(JSON.stringify({ error: "评论不能为空" }), { status: 400, headers: { "Content-Type": "application/json" } });
+      if (content.length > 500) return new Response(JSON.stringify({ error: "评论过长，限制500字" }), { status: 400, headers: { "Content-Type": "application/json" } });
+
+      const comment = { name, content, date: Date.now() };
+      const q = await kv.get(QUEUE_KEY);
+      const queue = q.value || [];
+      queue.push(comment);
+      if (queue.length > MAX_QUEUE_SIZE) queue.shift();
+      await kv.set(QUEUE_KEY, queue);
+
+      return new Response(JSON.stringify({ message: "评论成功" }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+
+    // --- 获取评论 ---
+    if (url.pathname === "/getComments") {
+      const q = await kv.get(QUEUE_KEY);
+      return new Response(JSON.stringify(q.value || [{name:"提示",content:"还没有人评论，发一条友好的信息吧。",date:Date.now()}]), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+
+    return new Response(JSON.stringify({ error: "404 Not Found" }), { status: 404, headers: { "Content-Type": "application/json" } });
   },
 };
