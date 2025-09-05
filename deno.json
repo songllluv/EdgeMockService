@@ -1,12 +1,7 @@
 {
-  "tasks": {},
-  "imports": {},
   "permissions": {
-    "env": true,
-    "read": true,
-    "write": true,
     "net": true,
-    "deno-plugins": true,
     "kv": "write"
-  }
+  },
+  "unstable": true
 }
