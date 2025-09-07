@@ -65,6 +65,18 @@ export default {
     const url = new URL(req.url);
     const data = await req.json().catch(() => ({}));
 
+    if (url.protocol !== "https:") {
+      return new Response(JSON.stringify({ error: "请使用 HTTPS 访问！这是为了最基本的网络安全。" }), {
+        status: 403,
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "https://songlll.pages.dev",
+          "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type",
+        },
+      });
+    }
+
     // --- 注册 ---
     if (url.pathname === "/register") {
       const { name, password, key } = data;
