@@ -76,6 +76,24 @@ export default {
       });
     }
 
+    // --- 清理过期 ---
+    if (url.pathname === "/clean") {
+      const { password } = data;
+      if (password !== ADMIN_PASSWORD && !(await checkTempPassword(password))) {
+        return new Response(JSON.stringify({ error: "无权限" }), { status: 403, headers: corsHeaders });
+      }
+      cleanExpiredKeys().catch(console.error);
+      return new Response(JSON.stringify({ message: "清理任务已触发" }), { status: 200, headers: corsHeaders });
+    }
+
+    // --- 获取 token 用户名 ---
+    if (url.pathname === "/me") {
+      const { token } = data;
+      const name = await checkLogin(token);
+      if (!name) return new Response(JSON.stringify({ error: "未登录" }), { status: 403, headers: corsHeaders });
+      return new Response(JSON.stringify({ name }), { status: 200, headers: corsHeaders });
+    }
+
     // --- 注册 ---
     if (url.pathname === "/register") {
       const { name, password, key } = data;
