@@ -65,6 +65,17 @@ export default {
     const url = new URL(req.url);
     const data = await req.json().catch(() => ({}));
 
+    if (req.method === "OPTIONS") {
+      return new Response(null, {
+        status: 204,
+        headers: {
+          "Access-Control-Allow-Origin": "*", // 开发调试时可用 *，上线改成你前端域名
+          "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type",
+        },
+      });
+    }
+
     // --- 注册 ---
     if (url.pathname === "/register") {
       const { name, password, key } = data;
@@ -156,7 +167,7 @@ export default {
     // --- 获取评论 ---
     if (url.pathname === "/getComments") {
       const q = await kv.get(QUEUE_KEY);
-      return new Response(JSON.stringify(q.value || [{name:"提示",content:"还没有人评论，发一条友好的信息吧。",date:Date.now()}]), { status: 200, headers: corsHeaders });
+      return new Response(JSON.stringify(q.value || [{ name: "提示", content: "还没有人评论，发一条友好的信息吧。", date: Date.now() }]), { status: 200, headers: corsHeaders });
     }
 
     return new Response(JSON.stringify({ error: "404 Not Found" }), { status: 404, headers: corsHeaders });
