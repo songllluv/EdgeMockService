@@ -176,7 +176,7 @@ export default {
       const q = await kv.get(QUEUE_KEY);
       const queue = q.value || [];
       queue.push(comment);
-      if (queue.length > MAX_QUEUE_SIZE) queue.shift();
+      while (queue.length > MAX_QUEUE_SIZE) queue.shift();
       await kv.set(QUEUE_KEY, queue);
 
       return new Response(JSON.stringify({ message: "评论成功" }), { status: 200, headers: corsHeaders });
