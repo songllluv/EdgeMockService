@@ -2,7 +2,7 @@
 
 const kv = await Deno.openKv();
 const QUEUE_KEY = ["comments"];
-const MAX_QUEUE_SIZE = 80;
+const MAX_QUEUE_SIZE = 10;
 
 // 超长站长密码
 const ADMIN_PASSWORD = Deno.env.get("ADMIN_PASSWORD") || ".i6}HDhQIdu2.wOmqPLaA8Qp<JXTze*XJL>{<c@r4!^a|A|k,O#x}{04PCy*wl&nfhPTVUpm>i7ATOQiZ<A#irY?Q>NU-QVEAiua)X2_#</.q)[r9:JHM]Qb46Ju-$U?a/w8+C9lODT6h@|:^!54:&21_j3WqcO=8g<M9I]Kn|D#(*Dkb_[XOdn*_eZybHT|f#WSW5|?w_](/@d.jog3%+&NNlp]tw}mN!v7_Z&yE[3yN98Q_DD#{KTpmqOV^__Q";
