@@ -62,6 +62,8 @@ const corsHeaders = {
 
 export default {
   async fetch(req) {
+    try{
+
     const url = new URL(req.url);
     const data = await req.json().catch(() => ({}));
 
@@ -189,5 +191,10 @@ export default {
     }
 
     return new Response(JSON.stringify({ error: "404 Not Found" }), { status: 404, headers: corsHeaders });
+    }
+    catch (e) {
+      console.error(e);
+      return new Response(JSON.stringify({ error: "出错了" }), { status: 500, headers: corsHeaders });
+    }
   },
 };
