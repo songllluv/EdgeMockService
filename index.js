@@ -82,7 +82,7 @@ export default {
       if (password !== ADMIN_PASSWORD && !(await checkTempPassword(password))) {
         return new Response(JSON.stringify({ error: "无权限" }), { status: 403, headers: corsHeaders });
       }
-      const deleted = await cleanExpiredKeys();
+      await cleanExpiredKeys();
       return new Response(JSON.stringify({ message: "清理任务已触发" }), { status: 200, headers: corsHeaders });
     }
 
