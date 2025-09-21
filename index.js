@@ -1,11 +1,18 @@
 // index.js
+import { ArgonWorker, variant } from "https://deno.land/x/argon2ian/dist/argon2ian.async.min.js";
+import { encode, decode } from "https://deno.land/std@0.192.0/encoding/base64.ts";
+
+const wrk = new ArgonWorker();
+await wrk.ready;
 
 const kv = await Deno.openKv();
 const QUEUE_KEY = ["comments"];
 const MAX_QUEUE_SIZE = 10;
 
 // 超长站长密码
-const ADMIN_PASSWORD = Deno.env.get("ADMIN_PASSWORD") || ".i6}HDhQIdu2.wOmqPLaA8Qp<JXTze*XJL>{<c@r4!^a|A|k,O#x}{04PCy*wl&nfhPTVUpm>i7ATOQiZ<A#irY?Q>NU-QVEAiua)X2_#</.q)[r9:JHM]Qb46Ju-$U?a/w8+C9lODT6h@|:^!54:&21_j3WqcO=8g<M9I]Kn|D#(*Dkb_[XOdn*_eZybHT|f#WSW5|?w_](/@d.jog3%+&NNlp]tw}mN!v7_Z&yE[3yN98Q_DD#{KTpmqOV^__Q";
+const ADMIN_PASSWORD =
+  Deno.env.get("ADMIN_PASSWORD") ||
+  ".i6}HDhQIdu2.wOmqPLaA8Qp<JXTze*XJL>{<c@r4!^a|A|k,O#x}{04PCy*wl&nfhPTVUpm>i7ATOQiZ<A#irY?Q>NU-QVEAiua)X2_#</.q)[r9:JHM]Qb46Ju-$U?a/w8+C9lODT6h@|:^!54:&21_j3WqcO=8g<M9I]Kn|D#(*Dkb_[XOdn*_eZybHT|f#WSW5|?w_](/@d.jog3%+&NNlp]tw}mN!v7_Z&yE[3yN98Q_DD#{KTpmqOV^__Q";
 
 // 工具函数
 async function checkTempPassword(password) {
@@ -40,23 +47,31 @@ function validatePassword(password, minLength = 8) {
   return null;
 }
 
-// 清理过期 invite key / temp password / token（可调用定时器触发）
+// 清理过期 invite key / temp password / token
 async function cleanExpiredKeys() {
   for await (const entry of kv.list({ prefix: ["invitekey"] })) {
-    if (entry.value < Date.now()) {
-      await kv.delete(entry.key);
-    }
+    if (entry.value < Date.now()) await kv.delete(entry.key);
   }
   for await (const entry of kv.list({ prefix: ["tempPassword"] })) {
-    if (entry.value < Date.now()) {
-      await kv.delete(entry.key);
-    }
+    if (entry.value < Date.now()) await kv.delete(entry.key);
   }
   for await (const entry of kv.list({ prefix: ["token"] })) {
-    if (entry.value.validityTime < Date.now()) {
-      await kv.delete(entry.key);
-    }
+    if (entry.value.validityTime < Date.now()) await kv.delete(entry.key);
   }
+}
+
+// Argon2 哈希函数，返回 Base64
+async function argon2(password, salt = crypto.getRandomValues(new Uint8Array(16))) {
+  const hashedBytes = await wrk.hash(new TextEncoder().encode(password), salt, {
+    t: 3, // 迭代次数
+    m: 65536, // 内存 64 MB
+    p: 1, // 并行度
+    variant: variant.Argon2id,
+  });
+  return {
+    salt: encode(salt),
+    hashed: encode(hashedBytes),
+  };
 }
 
 const corsHeaders = {
@@ -69,19 +84,11 @@ const corsHeaders = {
 export default {
   async fetch(req) {
     try {
-
       const url = new URL(req.url);
       const data = await req.json().catch(() => ({}));
 
       if (req.method === "OPTIONS") {
-        return new Response(null, {
-          status: 204,
-          headers: {
-            "Access-Control-Allow-Origin": "*", // 开发调试时可用 *，上线改成你前端域名
-            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type",
-          },
-        });
+        return new Response(null, { status: 204, headers: corsHeaders });
       }
 
       // --- 清理过期 ---
@@ -122,7 +129,7 @@ export default {
         const user = await kv.get(["user", name]);
         if (user.value) return new Response(JSON.stringify({ error: "用户名已存在" }), { status: 400, headers: corsHeaders });
 
-        await kv.set(["user", name], { password });
+        await kv.set(["user", name], await argon2(password));
         await kv.delete(["invitekey", key]);
 
         return new Response(JSON.stringify({ message: "注册成功" }), { status: 200, headers: corsHeaders });
@@ -135,7 +142,7 @@ export default {
           return new Response(JSON.stringify({ error: "密码无效" }), { status: 403, headers: corsHeaders });
         }
         const key = Math.random().toString(36).slice(-8);
-        const validityTime = Date.now() + 7 * 24 * 60 * 60 * 1000; // 7天
+        const validityTime = Date.now() + 7 * 24 * 60 * 60 * 1000;
         await kv.set(["invitekey", key], validityTime);
         return new Response(JSON.stringify({ key, validUntil: validityTime }), { status: 200, headers: corsHeaders });
       }
@@ -152,7 +159,7 @@ export default {
         const temp = await kv.get(["tempPassword", newPassword]);
         if (temp.value) return new Response(JSON.stringify({ error: "临时密码已存在" }), { status: 400, headers: corsHeaders });
 
-        const validityTime = Date.now() + 7 * 24 * 60 * 60 * 1000; // 7天
+        const validityTime = Date.now() + 7 * 24 * 60 * 60 * 1000;
         await kv.set(["tempPassword", newPassword], validityTime);
 
         return new Response(JSON.stringify({ message: "临时密码添加成功", validUntil: validityTime }), { status: 200, headers: corsHeaders });
@@ -162,11 +169,22 @@ export default {
       if (url.pathname === "/login") {
         const { name, password } = data;
         const user = await kv.get(["user", name]);
-        if (!user.value || user.value.password !== password) {
+        if (!user.value) return new Response(JSON.stringify({ error: "用户名或密码错误" }), { status: 400, headers: corsHeaders });
+
+        // 迁移旧明文密码
+        if (user.value.password) {
+          const hashedUser = await argon2(user.value.password);
+          await kv.set(["user", name], hashedUser);
+          return new Response(JSON.stringify({ error: "数据刚刚迁移完成，请重试。" }), { status: 400, headers: corsHeaders });
+        }
+
+        const { hashed } = await argon2(password, decode(user.value.salt));
+        if (user.value.hashed !== hashed) {
           return new Response(JSON.stringify({ error: "用户名或密码错误" }), { status: 400, headers: corsHeaders });
         }
+
         const token = crypto.randomUUID();
-        const validityTime = Date.now() + 24 * 60 * 60 * 1000; // 24小时
+        const validityTime = Date.now() + 24 * 60 * 60 * 1000;
         await kv.set(["token", token], { name, validityTime });
         return new Response(JSON.stringify({ token, validUntil: validityTime }), { status: 200, headers: corsHeaders });
       }
@@ -193,12 +211,14 @@ export default {
       // --- 获取评论 ---
       if (url.pathname === "/getComments") {
         const q = await kv.get(QUEUE_KEY);
-        return new Response(JSON.stringify(q.value || [{ name: "提示", content: "还没有人评论，发一条友好的信息吧。", date: Date.now() }]), { status: 200, headers: corsHeaders });
+        return new Response(
+          JSON.stringify(q.value || [{ name: "提示", content: "还没有人评论，发一条友好的信息吧。", date: Date.now() }]),
+          { status: 200, headers: corsHeaders }
+        );
       }
 
       return new Response(JSON.stringify({ error: "404 Not Found" }), { status: 404, headers: corsHeaders });
-    }
-    catch (e) {
+    } catch (e) {
       console.error(e);
       return new Response(JSON.stringify({ error: "出错了" }), { status: 500, headers: corsHeaders });
     }
