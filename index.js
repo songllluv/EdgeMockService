@@ -1,5 +1,5 @@
 // index.js
-import { ArgonWorker, variant } from "https://deno.land/x/argon2ian/dist/argon2ian.async.min.js";
+import { ArgonWorker, variant } from "https://deno.land/x/argon2ian@2.0.1/dist/argon2ian.async.min.js";
 import { encode, decode } from "https://deno.land/std@0.192.0/encoding/base64.ts";
 
 const wrk = new ArgonWorker();
