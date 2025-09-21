@@ -1,9 +1,6 @@
 // index.js
-import { ArgonWorker, variant } from "https://deno.land/x/argon2ian@2.0.1/dist/argon2ian.sync.min.js";
+import { hash, variant } from "https://deno.land/x/argon2ian@2.0.1/dist/argon2ian.sync.min.js";
 import { encode, decode } from "https://deno.land/std@0.192.0/encoding/base64.ts";
-
-const wrk = new ArgonWorker();
-await wrk.ready;
 
 const kv = await Deno.openKv();
 const QUEUE_KEY = ["comments"];
@@ -61,8 +58,8 @@ async function cleanExpiredKeys() {
 }
 
 // Argon2 哈希函数，返回 Base64
-async function argon2(password, salt = crypto.getRandomValues(new Uint8Array(16))) {
-  const hashedBytes = await wrk.hash(new TextEncoder().encode(password), salt, {
+function argon2(password, salt = crypto.getRandomValues(new Uint8Array(16))) {
+  const hashedBytes = hash(new TextEncoder().encode(password), salt, {
     t: 3, // 迭代次数
     m: 65536, // 内存 64 MB
     p: 1, // 并行度
@@ -129,7 +126,7 @@ export default {
         const user = await kv.get(["user", name]);
         if (user.value) return new Response(JSON.stringify({ error: "用户名已存在" }), { status: 400, headers: corsHeaders });
 
-        await kv.set(["user", name], await argon2(password));
+        await kv.set(["user", name], argon2(password));
         await kv.delete(["invitekey", key]);
 
         return new Response(JSON.stringify({ message: "注册成功" }), { status: 200, headers: corsHeaders });
@@ -173,13 +170,16 @@ export default {
 
         // 迁移旧明文密码
         if (user.value.password) {
-          const hashedUser = await argon2(user.value.password);
+          const hashedUser = argon2(user.value.password);
           await kv.set(["user", name], hashedUser);
           return new Response(JSON.stringify({ error: "数据刚刚迁移完成，请重试。" }), { status: 400, headers: corsHeaders });
         }
 
-        const { hashed } = await argon2(password, decode(user.value.salt));
-        if (user.value.hashed !== hashed) {
+        const hashedAttempt = encode(hash(new TextEncoder().encode(password), decode(user.value.salt), {
+          t: 3, m: 65536, p: 1, variant: variant.Argon2id
+        }));
+
+        if (user.value.hashed !== hashedAttempt) {
           return new Response(JSON.stringify({ error: "用户名或密码错误" }), { status: 400, headers: corsHeaders });
         }
 
