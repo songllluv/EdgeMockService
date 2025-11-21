@@ -1,0 +1,7 @@
+{
+  "version": "5",
+  "remote": {
+    "https://deno.land/std@0.192.0/encoding/base64.ts": "144ae6234c1fbe5b68666c711dc15b1e9ee2aef6d42b3b4345bf9a6c91d70d0d",
+    "https://deno.land/x/argon2ian@2.0.1/dist/argon2ian.sync.min.js": "e8ef8d84276c53bdd55235c38d43d880a17f323ee8eadf1c8f1deba6dfe222e8"
+  }
+}

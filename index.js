@@ -4,7 +4,7 @@ import { encode, decode } from "https://deno.land/std@0.192.0/encoding/base64.ts
 
 const kv = await Deno.openKv();
 const QUEUE_KEY = ["comments"];
-const MAX_QUEUE_SIZE = 10;
+const MAX_QUEUE_SIZE = 50;
 
 // 超长站长密码
 const ADMIN_PASSWORD =
@@ -60,9 +60,9 @@ async function cleanExpiredKeys() {
 // Argon2 哈希函数，返回 Base64
 function argon2(password, salt = crypto.getRandomValues(new Uint8Array(16))) {
   const hashedBytes = hash(new TextEncoder().encode(password), salt, {
-    t: 3, // 迭代次数
-    m: 65536, // 内存 64 MB
-    p: 1, // 并行度
+    t: 3,
+    m: 65536,
+    p: 1,
     variant: variant.Argon2id,
   });
   return {
