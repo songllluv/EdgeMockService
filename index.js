@@ -74,7 +74,6 @@ function argon2(password, salt = crypto.getRandomValues(new Uint8Array(16))) {
 const AllowedOrigins = new Set([
   "https://songlll.pages.dev",
   "https://songlll-pre-release.pages.dev",
-  "http://localhost:3000",
 ]);
 
 function corsHeaders(req) {
