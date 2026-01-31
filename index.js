@@ -84,6 +84,10 @@ export default {
         return new Response(null, { status: 204, headers: AllowedOrigins });
       }
 
+      if (url.pathname === "/ping") {
+        return new Response("pong", { status: 200, headers: AllowedOrigins });
+      }
+
       // --- 清理过期 ---
       if (url.pathname === "/clean") {
         const { password } = data;
