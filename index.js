@@ -71,7 +71,7 @@ function argon2(password, salt = crypto.getRandomValues(new Uint8Array(16))) {
   };
 }
 
-const AllowedOrigins = "https://songlll.pages.dev",;
+const AllowedOrigins = "https://songlll.pages.dev";
 
 
 export default {
