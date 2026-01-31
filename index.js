@@ -80,7 +80,7 @@ const header = {
 
 async function cf_captcha_verify(token) {
   const url = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
-  const secret = Deno.env.get("CF_CAPTCHA_SECRET");
+  const secret = Deno.env.get("CF_CAPTCHA_SECRET")||"这里填放置你的 Cloudflare Turnstile 密钥";
   const body = new URLSearchParams();
   body.append("secret", secret);
   body.append("response", token);
