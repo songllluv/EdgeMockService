@@ -78,6 +78,23 @@ const header = {
   "Access-Control-Allow-Headers": "Content-Type",
 };
 
+async function cf_captcha_verify(token) {
+  const url = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
+  const secret = Deno.env.get("CF_CAPTCHA_SECRET");
+  const body = new URLSearchParams();
+  body.append("secret", secret);
+  body.append("response", token);
+  const resp = await fetch(url, {
+    method: "POST",
+    body: body,
+  });
+  const data = await resp.json();
+  if (data.success) {
+    return true;
+  }
+  return false;
+}
+
 
 export default {
   async fetch(req) {
@@ -168,7 +185,10 @@ export default {
 
       // --- 登录 ---
       if (url.pathname === "/login") {
-        const { name, password } = data;
+        const { name, password, captchaToken } = data;
+        if(!await cf_captcha_verify(captchaToken)) {
+          return new Response(JSON.stringify({ error: "验证码验证失败" }), { status: 400, headers: header });
+        }
         const user = await kv.get(["user", name]);
         if (!user.value) return new Response(JSON.stringify({ error: "用户名或密码错误" }), { status: 400, headers: header });
 
