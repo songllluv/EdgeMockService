@@ -73,7 +73,7 @@ function argon2(password, salt = crypto.getRandomValues(new Uint8Array(16))) {
 
 const header = {
   "Content-Type": "application/json;charset=UTF-8",
-  "Access-Control-Allow-Origin": "songlll.pages.dev",
+  "Access-Control-Allow-Origin": "https://songlll.pages.dev",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type",
 };
