@@ -130,7 +130,11 @@ export default {
 
       // --- 注册 ---
       if (url.pathname === "/register") {
-        const { name, password, key } = data;
+        const { name, password, key, captchaToken } = data;
+
+        if(!await cf_captcha_verify(captchaToken)) {
+          return new Response(JSON.stringify({ error: "验证码验证失败" }), { status: 400, headers: header });
+        }
 
         const usernameErr = validateUsername(name);
         if (usernameErr) return new Response(JSON.stringify({ error: usernameErr }), { status: 400, headers: header });
@@ -215,9 +219,13 @@ export default {
 
       // --- 发表评论 ---
       if (url.pathname === "/postComment") {
-        const { token, content } = data;
+        const { token, content, captchaToken } = data;
         const name = await checkLogin(token);
         if (!name) return new Response(JSON.stringify({ error: "未登录" }), { status: 403, headers: header });
+
+        if(!await cf_captcha_verify(captchaToken)) {
+          return new Response(JSON.stringify({ error: "验证码验证失败" }), { status: 400, headers: header });
+        }
 
         if (!content || content.length === 0) return new Response(JSON.stringify({ error: "评论不能为空" }), { status: 400, headers: header });
         if (content.length > 500) return new Response(JSON.stringify({ error: "评论过长，限制500字" }), { status: 400, headers: header });
