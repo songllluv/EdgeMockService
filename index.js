@@ -142,6 +142,7 @@ export default {
         const passwordErr = validatePassword(password);
         if (passwordErr) return new Response(JSON.stringify({ error: passwordErr }), { status: 400, headers: header });
 
+        console.log("Register attempt:", name, key);
         const keyRes = await kv.get(["invitekey", key]);
         if (!keyRes.value) return new Response(JSON.stringify({ error: "邀请码无效" }), { status: 400, headers: header });
         if (keyRes.value < Date.now()) {
