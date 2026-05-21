@@ -249,11 +249,159 @@ export default {
           { status: 200, headers: header }
         );
       }
+      if (url.pathname.substring(0, 6) === "/group/") {
+        const operation = url.pathname.split("/")[2];
+        const groupName = url.pathname.split("/")[3];
+        if(operation === "create") {
+          const { token } = data;
+          const name = await checkLogin(token);
+          if (!name) return new Response(JSON.stringify({ error: "未登录" }), { status: 403, headers: header });
+          if (!groupName || groupName.length < 3 || groupName.length > 20) {
+            return new Response(JSON.stringify({ error: "群组名称需要3-20位" }), { status: 400, headers: header });
+          }
+          const groupKey = ["group", groupName];
+          const existingGroup = await kv.get(groupKey);
+          if (existingGroup.value) {
+            return new Response(JSON.stringify({ error: "群组名称已存在" }), { status: 400, headers: header });
+          }
+          await kv.set(groupKey, { creator: name, members: [name]} );
+          return new Response(JSON.stringify({ message: "群组创建成功" }), { status: 200, headers: header });
+        }
 
+        if(operation === "applyjoin") {
+          const { token } = data;
+          const name = await checkLogin(token);
+          if (!name) return new Response(JSON.stringify({ error: "未登录" }), { status: 403, headers: header });
+          const groupKey = ["group", groupName];
+          const group = await kv.get(groupKey);
+          if (!group.value) {
+            return new Response(JSON.stringify({ error: "群组不存在" }), { status: 404, headers: header });
+          }
+          if (group.value.members.includes(name)) {
+            return new Response(JSON.stringify({ error: "你已经是群组成员了" }), { status: 400, headers: header });
+          }
+          if(group.value.applymembers && group.value.applymembers.includes(name)) {
+            return new Response(JSON.stringify({ error: "你已经申请过了，请耐心等待群主审批" }), { status: 400, headers: header });
+          }
+          await kv.set(groupKey, { ...group.value, applymembers: [...group.value.applymembers, name] });
+          return new Response(JSON.stringify({ message: "申请加入群组成功" }), { status: 200, headers: header });
+        }
+
+        if(operation === "approve") {
+          const { token, applicant } = data;
+          const name = await checkLogin(token);
+          if (!name) return new Response(JSON.stringify({ error: "未登录" }), { status: 403, headers: header });
+          const groupKey = ["group", groupName];
+          const group = await kv.get(groupKey);
+          if (!group.value) {
+            return new Response(JSON.stringify({ error: "群组不存在" }), { status: 404, headers: header });
+          }
+          if (group.value.creator !== name) {
+            return new Response(JSON.stringify({ error: "只有群主可以批准申请" }), { status: 403, headers: header });
+          }
+          if (!group.value.applymembers.includes(applicant)) {
+            return new Response(JSON.stringify({ error: "该用户没有申请加入群组" }), { status: 400, headers: header });
+          }
+          await kv.set(groupKey, { ...group.value, members: [...group.value.members, applicant], applymembers: group.value.applymembers.filter(m => m !== applicant) });
+          return new Response(JSON.stringify({ message: "批准申请成功" }), { status: 200, headers: header });
+        }
+
+        if(operation === "memberlist") {
+          const { token } = data;
+          const name = await checkLogin(token);
+          if (!name) return new Response(JSON.stringify({ error: "未登录" }), { status: 403, headers: header });
+          const groupKey = ["group", groupName];
+          const group = await kv.get(groupKey);
+          if (!group.value) {
+            return new Response(JSON.stringify({ error: "群组不存在" }), { status: 404, headers: header });
+          }
+          return new Response(JSON.stringify({ members: group.value.members }), { status: 200, headers: header });
+        }
+
+        if(operation === "leave") {
+          const { token } = data;
+          const name = await checkLogin(token);
+          if (!name) return new Response(JSON.stringify({ error: "未登录" }), { status: 403, headers: header });
+          const groupKey = ["group", groupName];
+          const group = await kv.get(groupKey);
+          if (!group.value) {
+            return new Response(JSON.stringify({ error: "群组不存在" }), { status: 404, headers: header });
+          }
+          if (!group.value.members.includes(name)) {
+            return new Response(JSON.stringify({ error: "你不是群组成员" }), { status: 400, headers: header });
+          }
+          const newMembers = group.value.members.filter(m => m !== name);
+          if (newMembers.length === 0) {
+            await kv.delete(groupKey);
+          } else {
+            await kv.set(groupKey, { ...group.value, members: newMembers });
+          }
+          return new Response(JSON.stringify({ message: "退出群组成功" }), { status: 200, headers: header });
+        }
+
+        if(operation === "delete") {
+          const { token } = data;
+          const name = await checkLogin(token);
+          if (!name) return new Response(JSON.stringify({ error: "未登录" }), { status: 403, headers: header });
+          const groupKey = ["group", groupName];
+          const group = await kv.get(groupKey);
+          if (!group.value) {
+            return new Response(JSON.stringify({ error: "群组不存在" }), { status: 404, headers: header });
+          }
+          if (group.value.creator !== name) {
+            return new Response(JSON.stringify({ error: "只有群主可以删除群组" }), { status: 403, headers: header });
+          }
+          await kv.delete(groupKey);
+          return new Response(JSON.stringify({ message: "群组删除成功" }), { status: 200, headers: header });
+        }
+        
+        if(operation === "send") {
+          const { token, content } = data;
+          const name = await checkLogin(token);
+          if (!name) return new Response(JSON.stringify({ error: "未登录" }), { status: 403, headers: header });
+          const groupKey = ["group", groupName];
+          const group = await kv.get(groupKey);
+          if (!group.value) {
+            return new Response(JSON.stringify({ error: "群组不存在" }), { status: 404, headers: header });
+          }
+          if (!group.value.members.includes(name)) {
+            return new Response(JSON.stringify({ error: "你不是群组成员" }), { status: 403, headers: header });
+          }
+          if (!content || content.length === 0) return new Response(JSON.stringify({ error: "消息不能为空" }), { status: 400, headers: header });
+          if (content.length > 1000) return new Response(JSON.stringify({ error: "消息过长，限制1000字" }), { status: 400, headers: header });
+          const message = { name, content, date: Date.now() };
+          const messagesKey = ["groupMessages", groupName];
+          const msgRes = await kv.get(messagesKey);
+          const messages = msgRes.value || [];
+          messages.push(message);
+          while (messages.length > 100) messages.shift();
+          await kv.set(messagesKey, messages);
+          return new Response(JSON.stringify({ message: "消息发送成功" }), { status: 200, headers: header });
+        }
+
+        if(operation === "getMessages") {
+          const { token } = data;
+          const name = await checkLogin(token);
+          if (!name) return new Response(JSON.stringify({ error: "未登录" }), { status: 403, headers: header });
+          const groupKey = ["group", groupName];
+          const group = await kv.get(groupKey);
+          if (!group.value) {
+            return new Response(JSON.stringify({ error: "群组不存在" }), { status: 404, headers: header });
+          }
+          if (!group.value.members.includes(name)) {
+            return new Response(JSON.stringify({ error: "你不是群组成员" }), { status: 403, headers: header });
+          }
+          const messagesKey = ["groupMessages", groupName];
+          const msgRes = await kv.get(messagesKey);
+          const messages = msgRes.value || [];
+          return new Response(JSON.stringify({ messages }), { status: 200, headers: header });
+        }
+      }
       return new Response(JSON.stringify({ error: "404 Not Found" }), { status: 404, headers: header });
     } catch (e) {
-      console.error(e);
-      return new Response(JSON.stringify({ error: "出错了" }), { status: 500, headers: header });
+      const errorId = crypto.randomUUID();
+      console.error(errorId + ": " + e);
+      return new Response(JSON.stringify({ error: `屎山代码出错了(错误id:${errorId})，请重试` }), { status: 500, headers: header });
     }
   },
 };
